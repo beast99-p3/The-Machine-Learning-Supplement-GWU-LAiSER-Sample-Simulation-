@@ -38,12 +38,26 @@ class NumpyLogisticRegression:
         self.weights: np.ndarray = np.array([], dtype=float)
         self.bias = 0.0
         self.is_fitted = False
+        # Stored per-feature statistics for z-score standardization.
+        self.mean_: np.ndarray = np.array([], dtype=float)
+        self.std_: np.ndarray = np.array([], dtype=float)
 
     @staticmethod
     def _sigmoid(z: np.ndarray) -> np.ndarray:
         return 1.0 / (1.0 + np.exp(-np.clip(z, -500, 500)))
 
+    def _standardize(self, x: np.ndarray) -> np.ndarray:
+        """Apply stored z-score transform.  Called after fit() has populated mean_ / std_."""
+        return (x - self.mean_) / self.std_
+
     def fit(self, x: np.ndarray, y: np.ndarray) -> "NumpyLogisticRegression":
+        # Compute and cache per-feature statistics from the training split.
+        self.mean_ = x.mean(axis=0)
+        self.std_ = x.std(axis=0)
+        # Guard against zero-variance features (e.g. a constant column) to avoid division by zero.
+        self.std_ = np.where(self.std_ == 0, 1.0, self.std_)
+        x = self._standardize(x)
+
         n_samples, n_features = x.shape
         self.weights = np.zeros(n_features, dtype=float)
         self.bias = 0.0
@@ -75,6 +89,8 @@ class NumpyLogisticRegression:
         if not self.is_fitted:
             raise RuntimeError("Model must be fit before prediction.")
 
+        # Apply the same standardization that was fitted on the training data.
+        x = self._standardize(x)
         linear = x @ self.weights + self.bias
         probs = self._sigmoid(linear)
         return np.column_stack([1.0 - probs, probs])
